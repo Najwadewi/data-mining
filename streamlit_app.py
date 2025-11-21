@@ -97,13 +97,12 @@ else:
                 prob_svm = model_svm.predict_proba(vec)[0]
                 prob_ensemble = model_ensemble.predict_proba(vec)[0]
 
-                st.subheader("🎯 Hasil Analisis (Ensemble)")
-
             except Exception as e:
                 st.error(f"Terjadi error saat memproses: {e}")
-                st.stop()   # agar kode di bawahnya tidak dijalankan
+                st.stop()
 
-        # Lanjutkan tampilkan hasilnya
+        st.subheader("🎯 Hasil Analisis (Ensemble)")
+
         max_prob = max(prob_ensemble) * 100
         conf_text, conf_type = get_confidence_badge(max_prob)
 
@@ -120,6 +119,7 @@ else:
             st.metric("Negatif", f"{prob_ensemble[0]*100:.1f}%")
         with colB:
             st.metric("Positif", f"{prob_ensemble[1]*100:.1f}%")
+
 
 
                     # Probabilitas
