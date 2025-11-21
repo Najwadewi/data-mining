@@ -17,9 +17,9 @@ def load_model_objects():
         model_svm = joblib.load("model_linear_svm.pkl")
         model_ensemble = joblib.load("model_ensemble_voting.pkl")
         vectorizer = joblib.load("vectorizer_tfidf.pkl")
-        tools = joblib.load("preprocessing_tools.pkl")
+        tools = joblib.load("preprocessing_tools.pkl")  # berisi stopword & stemmer Sastrawi
         return model_bnb, model_svm, model_ensemble, vectorizer, tools
-    except:
+    except Exception as e:
         return None, None, None, None, None
 
 model_bnb, model_svm, model_ensemble, vectorizer, tools = load_model_objects()
@@ -48,85 +48,109 @@ st.markdown("### Ensemble Model (BernoulliNB + SVM)")
 
 models_loaded = all([model_bnb, model_svm, model_ensemble, vectorizer, tools])
 
+# Jika model tidak ditemukan
 if not models_loaded:
-    st.error("⚠️ File model tidak ditemukan.")
-else:
-    st.subheader("✍️ Masukkan Ulasan Film")
+    st.error("⚠️ File model tidak ditemukan di server Streamlit.")
+    st.stop()
 
-    example_texts = [
-        "Filmnya bagus banget, alurnya tidak ketebak!",
-        "Film jelek, buang waktu saja",
-        "Keren, aktingnya mantap sekali",
-        "Goblok banget filmnya tidak bermutu",
-        "Biasa aja sih, tidak terlalu bagus",
-        "Luar biasa, sangat recommended!"
-    ]
+# Input
+st.subheader("✍️ Masukkan Ulasan Film")
 
-    selected_example = st.selectbox(
-        "Pilih contoh ulasan:",
-        ["-- Ketik manual --"] + example_texts
-    )
+example_texts = [
+    "Filmnya bagus banget, alurnya tidak ketebak!",
+    "Film jelek, buang waktu saja",
+    "Keren, aktingnya mantap sekali",
+    "Goblok banget filmnya tidak bermutu",
+    "Biasa aja sih, tidak terlalu bagus",
+    "Luar biasa, sangat recommended!"
+]
 
-    default_text = "" if selected_example == "-- Ketik manual --" else selected_example
+selected_example = st.selectbox(
+    "Pilih contoh ulasan:",
+    ["-- Ketik manual --"] + example_texts
+)
 
-    input_text = st.text_area("Masukkan ulasan film:", value=default_text, height=100)
+default_text = "" if selected_example == "-- Ketik manual --" else selected_example
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        predict_btn = st.button("🔍 Analisis", type="primary")
-    with col2:
-        show_comparison = st.checkbox("Bandingkan model", value=True)
-    with col3:
-        show_details = st.checkbox("Detail preprocessing", value=False)
+input_text = st.text_area("Masukkan ulasan film:", value=default_text, height=100)
 
-
-    # ============================
-    #      PROSES ANALISIS
-    # ============================
-    if predict_btn:
-        if input_text.strip() == "":
-            st.warning("⚠️ Masukkan teks terlebih dahulu.")
-        else:
-            with st.spinner("Menganalisis..."):
-                try:
-                    # Preprocessing
-                    stopword_remover = tools['stopword']
-                    stemmer = tools['stemmer']
-                    processed = preprocess_text(input_text, stopword_remover, stemmer)
-                    vec = vectorizer.transform([processed])
-
-                    # Prediksi model
-                    pred_bnb = model_bnb.predict(vec)[0]
-                    pred_svm = model_svm.predict(vec)[0]
-                    pred_ensemble = model_ensemble.predict(vec)[0]
-
-                    prob_bnb = model_bnb.predict_proba(vec)[0]
-                    prob_svm = model_svm.predict_proba(vec)[0]
-                    prob_ensemble = model_ensemble.predict_proba(vec)[0]
-
-                    st.subheader("🎯 Hasil Analisis (Ensemble)")
-
-                    max_prob = max(prob_ensemble) * 100
-                    conf_text, conf_type = get_confidence_badge(max_prob)
-
-                    if pred_ensemble == "positive":
-                        st.success("### ✅ Sentimen: POSITIF")
-                    else:
-                        st.error("### ❌ Sentimen: NEGATIF")
-
-                    st.info(f"**Tingkat Keyakinan:** {conf_text} ({max_prob:.1f}%)")
+col1, col2, col3 = st.columns(3)
+with col1:
+    predict_btn = st.button("🔍 Analisis", type="primary")
+with col2:
+    show_comparison = st.checkbox("Bandingkan model", value=True)
+with col3:
+    show_details = st.checkbox("Detail preprocessing", value=False)
 
 
-                    # ========================
-                    #     Probabilitas
-                    # ========================
-                    st.write("**📊 Probabilitas:**")
+# Tombol Analisis ditekan
+if predict_btn:
 
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Negatif", f"{prob_ensemble[0] * 100:.1f}%")
-                    with col2:
-                        st.metric("Positif", f"{prob_ensemble[1] * 100:.1f}%")
+    if input_text.strip() == "":
+        st.warning("⚠️ Masukkan teks terlebih dahulu.")
+        st.stop()
 
-                except Exception as e:
-                    st.error(f"Terjadi error saat analisis: {e}")
+    with st.spinner('Menganalisis...'):
+        try:
+            stopword_remover = tools['stopword']
+            stemmer = tools['stemmer']
+            processed = preprocess_text(input_text, stopword_remover, stemmer)
+            vec = vectorizer.transform([processed])
+
+            pred_bnb = model_bnb.predict(vec)[0]
+            pred_svm = model_svm.predict(vec)[0]
+            pred_ensemble = model_ensemble.predict(vec)[0]
+
+            prob_bnb = model_bnb.predict_proba(vec)[0]
+            prob_svm = model_svm.predict_proba(vec)[0]
+            prob_ensemble = model_ensemble.predict_proba(vec)[0]
+
+        except Exception as e:
+            st.error(f"Terjadi error saat memproses: {e}")
+            st.stop()
+
+    # Hasil Ensemble
+    st.subheader("🎯 Hasil Analisis (Ensemble)")
+
+    max_prob = max(prob_ensemble) * 100
+    conf_text, conf_type = get_confidence_badge(max_prob)
+
+    if pred_ensemble == "positive":
+        st.success("### ✅ Sentimen: POSITIF")
+    else:
+        st.error("### ❌ Sentimen: NEGATIF")
+
+    st.info(f"**Tingkat Keyakinan:** {conf_text} ({max_prob:.1f}%)")
+
+    st.write("**📊 Probabilitas:**")
+    colA, colB = st.columns(2)
+    with colA:
+        st.metric("Negatif", f"{prob_ensemble[0]*100:.1f}%")
+    with colB:
+        st.metric("Positif", f"{prob_ensemble[1]*100:.1f}%")
+
+    # Bandingkan model
+    if show_comparison:
+        st.subheader("📌 Perbandingan Antar Model")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.write("### BernoulliNB")
+            st.metric("Negatif", f"{prob_bnb[0]*100:.1f}%")
+            st.metric("Positif", f"{prob_bnb[1]*100:.1f}%")
+
+        with col2:
+            st.write("### Linear SVM")
+            st.metric("Negatif", f"{prob_svm[0]*100:.1f}%")
+            st.metric("Positif", f"{prob_svm[1]*100:.1f}%")
+
+        with col3:
+            st.write("### Ensemble (Voting)")
+            st.metric("Negatif", f"{prob_ensemble[0]*100:.1f}%")
+            st.metric("Positif", f"{prob_ensemble[1]*100:.1f}%")
+
+    # Detail preprocessing
+    if show_details:
+        st.subheader("🧩 Detail Preprocessing")
+        st.code(processed)
