@@ -79,16 +79,11 @@ else:
         show_details = st.checkbox("Detail preprocessing", value=False)
 
     if predict_btn:
-        if input_text.strip() == "":
-            st.warning("⚠️ Masukkan teks terlebih dahulu.")
-        else:
-            with st.spinner('Menganalisis...'):
-                if predict_btn:
     if input_text.strip() == "":
         st.warning("⚠️ Masukkan teks terlebih dahulu.")
     else:
         with st.spinner('Menganalisis...'):
-                        try:
+            try:
                 stopword_remover = tools['stopword']
                 stemmer = tools['stemmer']
                 processed = preprocess_text(input_text, stopword_remover, stemmer)
@@ -106,23 +101,26 @@ else:
 
             except Exception as e:
                 st.error(f"Terjadi error saat memproses: {e}")
+                st.stop()   # agar kode di bawahnya tidak dijalankan
 
+        # Lanjutkan tampilkan hasilnya
+        max_prob = max(prob_ensemble) * 100
+        conf_text, conf_type = get_confidence_badge(max_prob)
 
+        if pred_ensemble == "positive":
+            st.success("### ✅ Sentimen: POSITIF")
+        else:
+            st.error("### ❌ Sentimen: NEGATIF")
 
-                    max_prob = max(prob_ensemble) * 100
-conf_text, conf_type = get_confidence_badge(max_prob)
+        st.info(f"**Tingkat Keyakinan:** {conf_text} ({max_prob:.1f}%)")
 
-if pred_ensemble == "positive":
-    st.success("### ✅ Sentimen: POSITIF")
-else:
-    st.error("### ❌ Sentimen: NEGATIF")
+        st.write("**📊 Probabilitas:**")
+        colA, colB = st.columns(2)
+        with colA:
+            st.metric("Negatif", f"{prob_ensemble[0]*100:.1f}%")
+        with colB:
+            st.metric("Positif", f"{prob_ensemble[1]*100:.1f}%")
 
-st.info(f"**Tingkat Keyakinan:** {conf_text} ({max_prob:.1f}%)")
-
-st.write("**📊 Probabilitas:**")
-col1, col2 = st.columns(2)
-with col1:
-    st.metric("Negatif", f"{prob_ensemble[0]*100:.1f}%")
 
                     # Probabilitas
                     st.write("**📊 Probabilitas:**")
