@@ -1,88 +1,68 @@
 import streamlit as st
-import joblib
+import pandas as pd
+import pickle
 import re
+from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 
-# Konfigurasi halaman
-st.set_page_config(
-    page_title="Analisis Sentimen Film",
-    page_icon="🎬",
-    layout="centered"
-)
-
-# Load model & tools
-@st.cache_resource
-def load_model_objects():
-    try:
-        model_bnb = joblib.load("model_bernoulli_nb.pkl")
-        model_svm = joblib.load("model_linear_svm.pkl")
-        model_ensemble = joblib.load("model_ensemble_voting.pkl")
-        vectorizer = joblib.load("vectorizer_tfidf.pkl")
-        tools = joblib.load("preprocessing_tools.pkl")
-        return model_bnb, model_svm, model_ensemble, vectorizer, tools
-    except:
-        return None, None, None, None, None
-
-model_bnb, model_svm, model_ensemble, vectorizer, tools = load_model_objects()
-
-# Preprocessing teks
-def preprocess_text(text, stopword_remover, stemmer):
-    text = re.sub('[^A-Za-z]+', ' ', text).lower().strip()
-    text = re.sub('\s+', ' ', text)
-    text = stopword_remover.remove(text)
+# ===============================
+# Fungsi Preprocessing
+# ===============================
+def preprocess_text(text, stopword, stemmer):
+    text = text.lower()
+    text = re.sub(r'[^a-zA-Z0-9\s]', ' ', text)
+    text = stopword.remove(text)
     text = stemmer.stem(text)
     return text
 
-# Confidence label
 def get_confidence_badge(prob):
-    if prob > 80:
-        return "🟢 Tinggi", "success"
-    elif prob > 60:
-        return "🟡 Sedang", "warning"
+    if prob >= 90:
+        return "Sangat Tinggi", "🟢"
+    elif prob >= 75:
+        return "Tinggi", "🟡"
+    elif prob >= 60:
+        return "Sedang", "🟠"
     else:
-        return "🔴 Rendah", "error"
+        return "Rendah", "🔴"
 
-# UI Utama
-st.title("🎬 Analisis Sentimen Film")
-st.markdown("### Ensemble Model (BernoulliNB + SVM)")
+# ===============================
+# Load Model & Tools
+# ===============================
+@st.cache_resource
+def load_all():
+    with open("vectorizer.pkl", "rb") as f:
+        vectorizer = pickle.load(f)
+    with open("bnb_model.pkl", "rb") as f:
+        model_bnb = pickle.load(f)
+    with open("svm_model.pkl", "rb") as f:
+        model_svm = pickle.load(f)
+    with open("ensemble_model.pkl", "rb") as f:
+        model_ensemble = pickle.load(f)
+    
+    tool = {
+        "stopword": StopWordRemoverFactory().create_stop_word_remover(),
+        "stemmer": StemmerFactory().create_stemmer()
+    }
+    return vectorizer, model_bnb, model_svm, model_ensemble, tool
 
-models_loaded = all([model_bnb, model_svm, model_ensemble, vectorizer, tools])
+vectorizer, model_bnb, model_svm, model_ensemble, tools = load_all()
 
-if not models_loaded:
-    st.error("⚠️ File model tidak ditemukan.")
-else:
-    st.subheader("✍️ Masukkan Ulasan Film")
+# ===============================
+# UI STREAMLIT
+# ===============================
+st.title("📊 Analisis Sentimen Ulasan Restoran")
 
-    example_texts = [
-        "Filmnya bagus banget, alurnya tidak ketebak!",
-        "Film jelek, buang waktu saja",
-        "Keren, aktingnya mantap sekali",
-        "Goblok banget filmnya tidak bermutu",
-        "Biasa aja sih, tidak terlalu bagus",
-        "Luar biasa, sangat recommended!"
-    ]
+input_text = st.text_area("Masukkan teks ulasan:")
+predict_btn = st.button("Prediksi")
 
-    selected_example = st.selectbox(
-        "Pilih contoh ulasan:",
-        ["-- Ketik manual --"] + example_texts
-    )
-
-    default_text = "" if selected_example == "-- Ketik manual --" else selected_example
-
-    input_text = st.text_area("Masukkan ulasan film:", value=default_text, height=100)
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        predict_btn = st.button("🔍 Analisis", type="primary")
-    with col2:
-        show_comparison = st.checkbox("Bandingkan model", value=True)
-    with col3:
-        show_details = st.checkbox("Detail preprocessing", value=False)
-
-    if predict_btn:
+# ===============================
+# LOGIKA PREDIKSI (SUDAH DIBENARKAN)
+# ===============================
+if predict_btn:
     if input_text.strip() == "":
         st.warning("⚠️ Masukkan teks terlebih dahulu.")
     else:
-        with st.spinner('Menganalisis...'):
+        with st.spinner("Menganalisis..."):
             try:
                 stopword_remover = tools['stopword']
                 stemmer = tools['stemmer']
@@ -101,29 +81,28 @@ else:
                 st.error(f"Terjadi error saat memproses: {e}")
                 st.stop()
 
-        st.subheader("🎯 Hasil Analisis (Ensemble)")
+        st.subheader("🎯 Hasil Analisis (Model Ensemble)")
 
         max_prob = max(prob_ensemble) * 100
-        conf_text, conf_type = get_confidence_badge(max_prob)
+        conf_text, conf_icon = get_confidence_badge(max_prob)
 
         if pred_ensemble == "positive":
             st.success("### ✅ Sentimen: POSITIF")
         else:
             st.error("### ❌ Sentimen: NEGATIF")
 
-        st.info(f"**Tingkat Keyakinan:** {conf_text} ({max_prob:.1f}%)")
+        st.info(f"**Tingkat Keyakinan:** {conf_icon} {conf_text} ({max_prob:.1f}%)")
 
+        # ===========================
+        # Probabilitas (Satu-satunya blok yang benar)
+        # ===========================
         st.write("**📊 Probabilitas:**")
         colA, colB = st.columns(2)
+
         with colA:
             st.metric("Negatif", f"{prob_ensemble[0]*100:.1f}%")
+
         with colB:
             st.metric("Positif", f"{prob_ensemble[1]*100:.1f}%")
 
-
-
-                    # Probabilitas
-                    st.write("**📊 Probabilitas:**")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Negatif", f"{prob_ensemble[0]*100:.1f}%")
+# Tidak ada blok duplikat di bawah ini!
